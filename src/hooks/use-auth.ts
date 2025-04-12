@@ -1,24 +1,14 @@
 
 import { useState, useEffect } from "react";
-import { createClient, User } from "@supabase/supabase-js";
+import { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    
-    if (!supabaseUrl || !supabaseKey) {
-      console.warn("Supabase credentials not found. Please connect to Supabase");
-      setLoading(false);
-      return;
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    
     // Get initial session
     const getInitialSession = async () => {
       try {

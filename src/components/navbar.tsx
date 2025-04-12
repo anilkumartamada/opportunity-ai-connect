@@ -1,12 +1,11 @@
-
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Menu, X, User } from "lucide-react";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { createClient } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 // Import the logo for our app
 import logo from "/lovable-uploads/19ee0d9a-a8ec-4e65-98a0-6c34833557ea.png";
@@ -28,15 +27,6 @@ export function Navbar() {
 
   const handleLogout = async () => {
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
       await supabase.auth.signOut();
       toast.success("Logged out successfully");
       window.location.href = "/";

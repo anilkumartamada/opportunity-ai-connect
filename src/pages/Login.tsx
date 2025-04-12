@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { AuthLayout } from "@/layouts/auth-layout";
@@ -7,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -20,15 +19,6 @@ export default function Login() {
     setIsLoading(true);
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password
@@ -50,15 +40,6 @@ export default function Login() {
     setIsLoading(true);
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
