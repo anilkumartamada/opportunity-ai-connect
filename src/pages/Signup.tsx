@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { AuthLayout } from "@/layouts/auth-layout";
@@ -34,26 +35,8 @@ export default function Signup() {
       
       if (authError) throw authError;
       
-      // Create initial profile if signup successful
-      if (authData.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            { 
-              id: authData.user.id,
-              name: fullName,
-              email: email,
-              skills: [],
-              education: '',
-              experience: '',
-              resume_url: ''
-            }
-          ]);
-          
-        if (profileError) {
-          console.error("Error creating profile:", profileError);
-        }
-      }
+      // Note: We don't need to manually create a profile record here
+      // Our database trigger will automatically create it
       
       toast.success("Account created successfully!");
       navigate("/profile");

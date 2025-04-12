@@ -1,1 +1,8 @@
+
 project_id = "xhkyetlapzkmcikqzipe"
+
+[storage]
+[storage.buckets.resumes]
+public = false
+file_size_limit = "5MB" 
+allowed_mime_types = ["application/pdf"]

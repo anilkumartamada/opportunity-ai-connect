@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
 import { MainLayout } from "@/layouts/main-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +12,7 @@ import { X, Upload, Plus, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 // Define the types
 interface ProfileData {
@@ -52,16 +52,6 @@ export default function Profile() {
     if (!user) return;
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -78,7 +68,13 @@ export default function Profile() {
         throw error;
       }
       
-      setProfile(data as ProfileData);
+      // Convert JSONB skills to string array if needed
+      const formattedProfile = {
+        ...data,
+        skills: Array.isArray(data.skills) ? data.skills : []
+      };
+      
+      setProfile(formattedProfile as ProfileData);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load profile");
@@ -91,10 +87,6 @@ export default function Profile() {
     if (!user) return;
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       // Create initial profile
       const initialProfile = {
         id: user.id,
@@ -126,10 +118,6 @@ export default function Profile() {
     setIsSaving(true);
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       // Upload resume if there is one
       let resumeUrl = profile.resume_url;
       if (resumeFile) {
