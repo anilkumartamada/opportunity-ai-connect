@@ -42,12 +42,18 @@ export const useDashboardData = (userId: string | undefined) => {
       // Calculate match opportunities
       const userSkills = normalizeSkills(profileData.skills);
       
-      const matchedOpps = (opportunitiesData as any[])
+      // Get IDs of opportunities the user has already applied to
+      const appliedOpportunityIds = new Set((applicationsData || []).map(app => app.opportunity_id));
+      
+      const matchedOpps = (opportunitiesData || [])
         .filter(opp => {
+          // Skip opportunities the user has already applied to
+          if (appliedOpportunityIds.has(opp.id)) return false;
+          
           // Normalize required_skills
           const requiredSkills = normalizeSkills(opp.required_skills);
           const matchScore = calculateMatchScore(userSkills, requiredSkills);
-          return matchScore >= 70;
+          return matchScore >= 50; // Only show opportunities with at least 50% match
         })
         .map(opp => {
           // Normalize required_skills
@@ -55,7 +61,7 @@ export const useDashboardData = (userId: string | undefined) => {
           
           return {
             ...opp,
-            required_skills: requiredSkills,
+            required_skills: requiredSkills as string[],
             match_score: calculateMatchScore(userSkills, requiredSkills)
           };
         })
@@ -64,7 +70,7 @@ export const useDashboardData = (userId: string | undefined) => {
       setMatchedOpportunities(matchedOpps as Opportunity[]);
       
       // Process applications
-      const formattedApplications = (applicationsData as any[]).map(app => {
+      const formattedApplications = (applicationsData || []).map(app => {
         // Process opportunity data within application
         let opportunity = app.opportunity;
         if (opportunity && opportunity.required_skills) {
@@ -72,7 +78,7 @@ export const useDashboardData = (userId: string | undefined) => {
             
           opportunity = {
             ...opportunity,
-            required_skills: requiredSkills
+            required_skills: requiredSkills as string[]
           };
         }
         
@@ -101,8 +107,6 @@ export const useDashboardData = (userId: string | undefined) => {
     matchedOpportunities,
     applications,
     isLoading,
-    fetchData,
-    setMatchedOpportunities,
-    setApplications
+    fetchData
   };
 };

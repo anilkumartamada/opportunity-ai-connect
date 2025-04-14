@@ -7,6 +7,11 @@ public = true
 file_size_limit = "5MB" 
 allowed_mime_types = ["application/pdf"]
 
+[storage.buckets.avatars]
+public = true
+file_size_limit = "5MB" 
+allowed_mime_types = ["image/png", "image/jpeg", "image/gif"]
+
 [functions]
 [functions.scrape-opportunities]
 [functions.auto-apply]

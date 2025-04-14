@@ -67,14 +67,18 @@ serve(async (req) => {
     
     const appliedOpportunityIds = new Set(existingApplications?.map(app => app.opportunity_id) || []);
     
-    // 4. Simulate AI matching logic
-    // In a real implementation, you'd use NLP to analyze the resume PDF and match with opportunities
-    const userSkills = profile.skills || [];
+    // 4. Use our improved matching algorithm
+    const userSkills = Array.isArray(profile.skills) ? profile.skills : 
+      (typeof profile.skills === 'string' ? JSON.parse(profile.skills) : []);
+      
     const matchedOpportunities = opportunities
       .filter(opp => !appliedOpportunityIds.has(opp.id)) // Filter out already applied 
       .map(opp => {
         // Calculate match score based on skill overlap
-        const matchScore = calculateMatchScore(userSkills, opp.required_skills);
+        const requiredSkills = Array.isArray(opp.required_skills) ? opp.required_skills :
+          (typeof opp.required_skills === 'string' ? JSON.parse(opp.required_skills) : []);
+          
+        const matchScore = calculateMatchScore(userSkills, requiredSkills);
         return { 
           opportunity: opp,
           match_score: matchScore
@@ -133,12 +137,49 @@ function calculateMatchScore(userSkills: string[], requiredSkills: string[]): nu
   const normUserSkills = userSkills.map(skill => skill.toLowerCase());
   const normRequiredSkills = requiredSkills.map(skill => skill.toLowerCase());
   
-  // Count matching skills
-  const matchingSkills = normRequiredSkills.filter(skill => 
-    normUserSkills.some(userSkill => userSkill.includes(skill) || skill.includes(userSkill))
-  );
+  // Create a map of technology groups for better matching
+  const techGroups = {
+    javascript: ['js', 'es6', 'typescript', 'ts', 'node', 'nodejs', 'react', 'vue', 'angular', 'jquery'],
+    frontend: ['html', 'css', 'sass', 'scss', 'less', 'bootstrap', 'tailwind', 'react', 'vue', 'angular', 'svelte'],
+    backend: ['node', 'express', 'django', 'flask', 'ruby', 'rails', 'php', 'laravel', 'spring', 'asp.net'],
+    database: ['sql', 'mysql', 'postgresql', 'postgres', 'mongodb', 'nosql', 'firebase', 'supabase', 'oracle', 'redis'],
+    mobile: ['android', 'ios', 'swift', 'kotlin', 'flutter', 'react native', 'xamarin'],
+    devops: ['docker', 'kubernetes', 'aws', 'azure', 'gcp', 'ci/cd', 'jenkins', 'github actions'],
+    ai: ['machine learning', 'ml', 'deep learning', 'dl', 'tensorflow', 'pytorch', 'nlp', 'computer vision', 'cv', 'ai'],
+    python: ['django', 'flask', 'fastapi', 'numpy', 'pandas', 'scikit-learn', 'pytorch', 'tensorflow']
+  };
   
-  return Math.round((matchingSkills.length / normRequiredSkills.length) * 100);
+  // Calculate matching score based on direct matches and related technology matches
+  let matchPoints = 0;
+  let totalPoints = normRequiredSkills.length;
+  
+  for (const requiredSkill of normRequiredSkills) {
+    // Direct match
+    if (normUserSkills.some(userSkill => 
+      userSkill.includes(requiredSkill) || 
+      requiredSkill.includes(userSkill)
+    )) {
+      matchPoints += 1;
+      continue;
+    }
+    
+    // Related technology match
+    for (const [group, technologies] of Object.entries(techGroups)) {
+      if (technologies.some(tech => tech.includes(requiredSkill) || requiredSkill.includes(tech))) {
+        // If required skill is in a tech group, check if user has any related skill
+        const hasRelatedSkill = normUserSkills.some(userSkill => 
+          technologies.some(tech => tech.includes(userSkill) || userSkill.includes(tech))
+        );
+        
+        if (hasRelatedSkill) {
+          matchPoints += 0.5; // Partial match for related technologies
+          break;
+        }
+      }
+    }
+  }
+  
+  return Math.round((matchPoints / totalPoints) * 100);
 }
 
 // Helper function to generate a cover letter
@@ -147,7 +188,7 @@ function generateCoverLetter(profile: any, opportunity: any): string {
 
 I am writing to express my interest in the ${opportunity.title} opportunity listed on ${opportunity.platform}.
 
-As a ${profile?.education || 'professional'} with skills in ${profile?.skills?.join(', ') || 'various technologies'}, I believe I am well-suited for this role. ${opportunity.required_skills ? `I am proficient in the required skills including ${opportunity.required_skills.join(', ')}.` : ''}
+As a ${profile?.education || 'professional'} with skills in ${Array.isArray(profile?.skills) ? profile?.skills.join(', ') : 'various technologies'}, I believe I am well-suited for this role. ${opportunity.required_skills ? `I am proficient in the required skills including ${Array.isArray(opportunity.required_skills) ? opportunity.required_skills.join(', ') : opportunity.required_skills}.` : ''}
 
 ${profile?.experience || 'I have experience in relevant projects and am eager to apply my skills in a professional environment.'}
 
