@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/layouts/main-layout";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export default function Opportunities() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
+  const [showExpired, setShowExpired] = useState(false);
   
   useEffect(() => {
     fetchOpportunities();
@@ -52,7 +54,7 @@ export default function Opportunities() {
         const processedData = data.map(opp => ({
           ...opp,
           required_skills: normalizeSkills(opp.required_skills)
-        }));
+        })) as Opportunity[];
         
         setOpportunities(processedData);
       }
@@ -89,56 +91,73 @@ export default function Opportunities() {
     }
   };
   
-  const getMockOpportunities = (): Opportunity[] => [
-    {
-      id: "1",
-      title: "Frontend Developer Internship",
-      platform: "Internshala",
-      deadline: "2023-06-30",
-      category: "Internship",
-      required_skills: ["React", "JavaScript", "CSS"]
-    },
-    {
-      id: "2",
-      title: "AI for Social Good Hackathon",
-      platform: "Devpost",
-      deadline: "2023-07-15",
-      category: "Hackathon",
-      required_skills: ["Python", "Machine Learning", "Data Analysis"]
-    },
-    {
-      id: "3",
-      title: "Full Stack Developer Workshop",
-      platform: "Unstop",
-      deadline: "2023-07-10",
-      category: "Workshop",
-      required_skills: ["JavaScript", "Node.js", "MongoDB"]
-    },
-    {
-      id: "4",
-      title: "Cloud Computing Internship",
-      platform: "LinkedIn",
-      deadline: "2023-08-05",
-      category: "Internship",
-      required_skills: ["AWS", "Docker", "Kubernetes"]
-    },
-    {
-      id: "5",
-      title: "Mobile App Development Challenge",
-      platform: "Unstop",
-      deadline: "2023-07-05",
-      category: "Hackathon",
-      required_skills: ["Flutter", "Firebase", "UI/UX"]
-    },
-    {
-      id: "6",
-      title: "Data Science Workshop Series",
-      platform: "Coursera",
-      deadline: "2023-06-25",
-      category: "Workshop",
-      required_skills: ["Python", "Data Visualization", "Machine Learning"]
-    }
-  ];
+  const getMockOpportunities = (): Opportunity[] => {
+    // Get today's date to create some future deadlines
+    const today = new Date();
+    const oneWeekAhead = new Date();
+    oneWeekAhead.setDate(today.getDate() + 7);
+    
+    const twoWeeksAhead = new Date();
+    twoWeeksAhead.setDate(today.getDate() + 14);
+    
+    const oneMonthAhead = new Date();
+    oneMonthAhead.setMonth(today.getMonth() + 1);
+    
+    const formatDate = (date: Date) => {
+      return date.toISOString().split('T')[0];
+    };
+    
+    return [
+      {
+        id: "1",
+        title: "Frontend Developer Internship",
+        platform: "Internshala",
+        deadline: formatDate(oneWeekAhead),
+        category: "Internship",
+        required_skills: ["React", "JavaScript", "CSS"]
+      },
+      {
+        id: "2",
+        title: "AI for Social Good Hackathon",
+        platform: "Devpost",
+        deadline: formatDate(twoWeeksAhead),
+        category: "Hackathon",
+        required_skills: ["Python", "Machine Learning", "Data Analysis"]
+      },
+      {
+        id: "3",
+        title: "Full Stack Developer Workshop",
+        platform: "Unstop",
+        deadline: formatDate(today),
+        category: "Workshop",
+        required_skills: ["JavaScript", "Node.js", "MongoDB"]
+      },
+      {
+        id: "4",
+        title: "Cloud Computing Internship",
+        platform: "LinkedIn",
+        deadline: formatDate(oneMonthAhead),
+        category: "Internship",
+        required_skills: ["AWS", "Docker", "Kubernetes"]
+      },
+      {
+        id: "5",
+        title: "Mobile App Development Challenge",
+        platform: "Unstop",
+        deadline: formatDate(oneWeekAhead),
+        category: "Hackathon",
+        required_skills: ["Flutter", "Firebase", "UI/UX"]
+      },
+      {
+        id: "6",
+        title: "Data Science Workshop Series",
+        platform: "Coursera",
+        deadline: formatDate(twoWeeksAhead),
+        category: "Workshop",
+        required_skills: ["Python", "Data Visualization", "Machine Learning"]
+      }
+    ];
+  };
   
   const getCategoryIcon = (category: string) => {
     switch (category.toLowerCase()) {
@@ -162,7 +181,7 @@ export default function Opportunities() {
     // Search term filter
     const matchesSearch = opp.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          opp.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         opp.required_skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         normalizeSkills(opp.required_skills).some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (opp.company && opp.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
                          (opp.location && opp.location.toLowerCase().includes(searchTerm.toLowerCase()));
     
@@ -172,13 +191,22 @@ export default function Opportunities() {
     // Platform filter
     const matchesPlatform = platformFilter === "all" || opp.platform === platformFilter;
     
-    return matchesSearch && matchesCategory && matchesPlatform;
+    // Deadline filter - filter out past opportunities unless showExpired is true
+    const today = new Date();
+    const deadline = new Date(opp.deadline);
+    const isNotExpired = showExpired || deadline >= today;
+    
+    return matchesSearch && matchesCategory && matchesPlatform && isNotExpired;
   });
   
   const sortedOpportunities = [...filteredOpportunities].sort((a, b) => {
     // Sort by deadline (closest first)
     return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
   });
+  
+  // Count of expired opportunities
+  const expiredCount = opportunities.filter(opp => new Date(opp.deadline) < new Date()).length;
+  const activeCount = opportunities.length - expiredCount;
   
   return (
     <MainLayout>
@@ -251,6 +279,21 @@ export default function Opportunities() {
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="flex items-center space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className={showExpired ? "bg-muted" : ""}
+                onClick={() => setShowExpired(!showExpired)}
+              >
+                <Clock className="h-4 w-4 mr-2" />
+                {showExpired ? "Showing All" : "Hide Expired"}
+                {expiredCount > 0 && !showExpired && (
+                  <Badge variant="secondary" className="ml-2">{expiredCount}</Badge>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
         
@@ -263,68 +306,87 @@ export default function Opportunities() {
             <div className="mb-4">
               <p className="text-sm text-muted-foreground">
                 Showing {sortedOpportunities.length} opportunities
+                {!showExpired && expiredCount > 0 && ` (${expiredCount} expired opportunities hidden)`}
               </p>
             </div>
             
             {sortedOpportunities.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sortedOpportunities.map((opportunity) => (
-                  <Card key={opportunity.id} className="flex flex-col">
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-xl">{opportunity.title}</CardTitle>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-sm text-muted-foreground">{opportunity.platform}</p>
-                        {opportunity.company && (
-                          <p className="text-sm font-medium">{opportunity.company}</p>
+                {sortedOpportunities.map((opportunity) => {
+                  const today = new Date();
+                  const deadlineDate = new Date(opportunity.deadline);
+                  const isDeadlinePassed = deadlineDate < today;
+                  
+                  return (
+                    <Card key={opportunity.id} className="flex flex-col">
+                      <CardHeader>
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-xl">{opportunity.title}</CardTitle>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">{opportunity.platform}</p>
+                          {opportunity.company && (
+                            <p className="text-sm font-medium">{opportunity.company}</p>
+                          )}
+                          {opportunity.location && (
+                            <p className="text-xs text-muted-foreground">{opportunity.location}</p>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="flex-1 flex flex-col">
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Clock className="mr-1 h-3 w-3" />
+                            <span className={isDeadlinePassed ? "text-destructive" : ""}>
+                              {isDeadlinePassed ? "Expired" : `Due ${deadlineDate.toLocaleDateString()}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            {getCategoryIcon(opportunity.category)}
+                            <span className="ml-1">{opportunity.category}</span>
+                          </div>
+                        </div>
+                        
+                        {opportunity.description && (
+                          <div className="mb-4">
+                            <p className="text-sm line-clamp-2">{opportunity.description}</p>
+                          </div>
                         )}
-                        {opportunity.location && (
-                          <p className="text-xs text-muted-foreground">{opportunity.location}</p>
+                        
+                        <div className="mb-4 flex-1">
+                          <p className="text-sm font-medium mb-2">Required Skills:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {normalizeSkills(opportunity.required_skills).map((skill) => (
+                              <Badge key={skill} variant="secondary" className="text-xs">
+                                {skill}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {user ? (
+                          <Link to="/dashboard">
+                            <Button 
+                              className="w-full" 
+                              disabled={isDeadlinePassed && !showExpired}
+                            >
+                              {isDeadlinePassed ? "Opportunity Expired" : "View in Dashboard"}
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link to="/signup">
+                            <Button 
+                              className="w-full"
+                              disabled={isDeadlinePassed && !showExpired}
+                            >
+                              {isDeadlinePassed ? "Opportunity Expired" : "Sign Up to Apply"}
+                            </Button>
+                          </Link>
                         )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col">
-                      <div className="grid grid-cols-2 gap-2 mb-4">
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Clock className="mr-1 h-3 w-3" />
-                          Due {new Date(opportunity.deadline).toLocaleDateString()}
-                        </div>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          {getCategoryIcon(opportunity.category)}
-                          <span className="ml-1">{opportunity.category}</span>
-                        </div>
-                      </div>
-                      
-                      {opportunity.description && (
-                        <div className="mb-4">
-                          <p className="text-sm line-clamp-2">{opportunity.description}</p>
-                        </div>
-                      )}
-                      
-                      <div className="mb-4 flex-1">
-                        <p className="text-sm font-medium mb-2">Required Skills:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {opportunity.required_skills.map((skill) => (
-                            <Badge key={skill} variant="secondary" className="text-xs">
-                              {skill}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {user ? (
-                        <Link to="/dashboard">
-                          <Button className="w-full">View in Dashboard</Button>
-                        </Link>
-                      ) : (
-                        <Link to="/signup">
-                          <Button className="w-full">Sign Up to Apply</Button>
-                        </Link>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-12 border rounded-lg bg-muted/30">
@@ -337,6 +399,7 @@ export default function Opportunities() {
                     setSearchTerm("");
                     setCategoryFilter("all");
                     setPlatformFilter("all");
+                    setShowExpired(true);
                   }}
                 >
                   Clear Filters

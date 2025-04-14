@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { MainLayout } from "@/layouts/main-layout";
@@ -113,13 +114,16 @@ export default function ProfilePage() {
         const uploadToastId = toast.loading(`Uploading resume: 0%`);
         
         try {
-          const { error: bucketError } = await supabase.storage.createBucket('resumes', {
-            public: true,
-          });
-          
-          if (bucketError && bucketError.message !== 'Bucket already exists') {
-            console.error("Error creating bucket:", bucketError);
-            toast.error("Failed to create storage bucket", { id: uploadToastId });
+          // Skip bucket creation as it's configured in supabase/config.toml
+          // and check if the bucket exists first
+          const { data: bucketData, error: bucketError } = await supabase
+            .storage
+            .getBucket('resumes');
+            
+          if (bucketError) {
+            console.error("Error checking bucket:", bucketError);
+            toast.error("Resume storage is not available", { id: uploadToastId });
+            throw bucketError;
           }
           
           const fileName = `${crypto.randomUUID()}_${resumeFile.name}`;
@@ -128,6 +132,7 @@ export default function ProfilePage() {
             .from("resumes")
             .upload(`${user.id}/${fileName}`, resumeFile, {
               upsert: true,
+              cacheControl: '3600'
             });
             
           setUploadProgress(100);
@@ -137,11 +142,12 @@ export default function ProfilePage() {
             throw fileError;
           }
           
+          // Get a public URL instead of a signed URL
           const { data: urlData } = await supabase.storage
             .from("resumes")
-            .createSignedUrl(fileData.path, 60 * 60 * 24 * 7);
+            .getPublicUrl(`${user.id}/${fileName}`);
           
-          resumeUrl = urlData?.signedUrl || '';
+          resumeUrl = urlData?.publicUrl || '';
           resumeName = resumeFile.name;
           
           toast.success("Resume uploaded successfully", { id: uploadToastId });
@@ -191,14 +197,16 @@ export default function ProfilePage() {
   const handleAddSkill = () => {
     if (!newSkill.trim() || !profile) return;
     
-    if (profile.skills.includes(newSkill.trim())) {
+    const normalizedSkills = normalizeSkills(profile.skills);
+    
+    if (normalizedSkills.includes(newSkill.trim())) {
       toast.error("This skill is already added");
       return;
     }
     
     setProfile({
       ...profile,
-      skills: [...profile.skills, newSkill.trim()]
+      skills: [...normalizedSkills, newSkill.trim()]
     });
     setNewSkill("");
   };
@@ -206,9 +214,11 @@ export default function ProfilePage() {
   const handleRemoveSkill = (skill: string) => {
     if (!profile) return;
     
+    const normalizedSkills = normalizeSkills(profile.skills);
+    
     setProfile({
       ...profile,
-      skills: profile.skills.filter(s => s !== skill)
+      skills: normalizedSkills.filter(s => s !== skill)
     });
   };
   
@@ -241,7 +251,7 @@ export default function ProfilePage() {
     
     if (profile.name) completed++;
     if (profile.email) completed++;
-    if (profile.skills.length > 0) completed++;
+    if (normalizeSkills(profile.skills).length > 0) completed++;
     if (profile.education) completed++;
     if (profile.experience) completed++;
     if (profile.resume_url || resumeFile) completed++;
@@ -314,7 +324,7 @@ export default function ProfilePage() {
                 <h2 className="text-xl font-semibold">Technical Skills</h2>
                 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {profile.skills.map((skill) => (
+                  {normalizeSkills(profile.skills).map((skill) => (
                     <Badge key={skill} className="pl-2 py-1">
                       {skill}
                       <button

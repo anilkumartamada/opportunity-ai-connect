@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock } from "lucide-react";
 import { Opportunity } from "@/types/database";
+import { normalizeSkills } from "@/utils/matchCalculator";
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
@@ -17,6 +18,11 @@ export const OpportunityCard = ({
   getCategoryIcon,
   onApply 
 }: OpportunityCardProps) => {
+  // Get current date to check if deadline is in the past
+  const today = new Date();
+  const deadlineDate = new Date(opportunity.deadline);
+  const isDeadlinePassed = deadlineDate < today;
+  
   return (
     <Card key={opportunity.id} className="flex flex-col">
       <CardHeader>
@@ -42,7 +48,9 @@ export const OpportunityCard = ({
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="flex items-center text-xs text-muted-foreground">
             <Clock className="mr-1 h-3 w-3" />
-            Due {new Date(opportunity.deadline).toLocaleDateString()}
+            <span className={isDeadlinePassed ? "text-destructive" : ""}>
+              {isDeadlinePassed ? "Deadline passed" : `Due ${deadlineDate.toLocaleDateString()}`}
+            </span>
           </div>
           <div className="flex items-center text-xs text-muted-foreground">
             {getCategoryIcon(opportunity.category)}
@@ -53,7 +61,7 @@ export const OpportunityCard = ({
         <div className="mb-4 flex-1">
           <p className="text-sm font-medium mb-2">Required Skills:</p>
           <div className="flex flex-wrap gap-1">
-            {opportunity.required_skills.map((skill) => (
+            {normalizeSkills(opportunity.required_skills).map((skill) => (
               <Badge key={skill} variant="secondary" className="text-xs">
                 {skill}
               </Badge>
@@ -64,8 +72,9 @@ export const OpportunityCard = ({
         <Button 
           onClick={() => onApply(opportunity)}
           className="w-full mt-2"
+          disabled={isDeadlinePassed}
         >
-          Auto-Apply with AI
+          {isDeadlinePassed ? "Deadline Passed" : "Auto-Apply with AI"}
         </Button>
       </CardContent>
     </Card>

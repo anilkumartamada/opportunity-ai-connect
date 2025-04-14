@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { Application } from "@/types/database";
+import { normalizeSkills } from "@/utils/matchCalculator";
 
 interface ApplicationCardProps {
   application: Application;
@@ -17,6 +18,11 @@ export const ApplicationCard = ({
   getCategoryIcon,
   onViewDetails 
 }: ApplicationCardProps) => {
+  // Get current date to check if deadline is in the past
+  const today = new Date();
+  const deadlineDate = application.opportunity?.deadline ? new Date(application.opportunity.deadline) : null;
+  const isDeadlinePassed = deadlineDate ? deadlineDate < today : false;
+  
   return (
     <Card key={application.id}>
       <CardHeader>
@@ -49,7 +55,13 @@ export const ApplicationCard = ({
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="flex items-center text-xs text-muted-foreground">
             <Clock className="mr-1 h-3 w-3" />
-            Due {new Date(application.opportunity?.deadline || "").toLocaleDateString()}
+            {deadlineDate ? (
+              <span className={isDeadlinePassed ? "text-destructive" : ""}>
+                {isDeadlinePassed ? "Deadline passed" : `Due ${deadlineDate.toLocaleDateString()}`}
+              </span>
+            ) : (
+              "No deadline"
+            )}
           </div>
           <div className="flex items-center text-xs text-muted-foreground">
             {getCategoryIcon(application.opportunity?.category || "")}
@@ -66,11 +78,13 @@ export const ApplicationCard = ({
         <div className="mb-4">
           <p className="text-sm font-medium mb-2">Required Skills:</p>
           <div className="flex flex-wrap gap-1">
-            {application.opportunity?.required_skills.map((skill) => (
-              <Badge key={skill} variant="secondary" className="text-xs">
-                {skill}
-              </Badge>
-            ))}
+            {application.opportunity?.required_skills && 
+              normalizeSkills(application.opportunity.required_skills).map((skill) => (
+                <Badge key={skill} variant="secondary" className="text-xs">
+                  {skill}
+                </Badge>
+              ))
+            }
           </div>
         </div>
         
