@@ -1,16 +1,25 @@
 
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
 import { MainLayout } from "@/layouts/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Calendar, Briefcase, Award, Clock, CheckCircle, AlertCircle, Filter } from "lucide-react";
+import { Calendar, Briefcase, Award, Clock, CheckCircle, AlertCircle, Filter, Sparkles } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Opportunity {
   id: string;
@@ -20,6 +29,10 @@ interface Opportunity {
   category: string;
   required_skills: string[];
   match_score?: number;
+  company?: string;
+  location?: string;
+  description?: string;
+  application_url?: string;
 }
 
 interface Application {
@@ -29,6 +42,7 @@ interface Application {
   match_score: number;
   cover_letter: string;
   opportunity?: Opportunity;
+  applied_at?: string;
 }
 
 export default function Dashboard() {
@@ -36,7 +50,10 @@ export default function Dashboard() {
   const [matchedOpportunities, setMatchedOpportunities] = useState<Opportunity[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAutoApplying, setIsAutoApplying] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   
   useEffect(() => {
     if (!loading && user) {
@@ -50,16 +67,6 @@ export default function Dashboard() {
     if (!user) return;
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       // Fetch user profile and skills
       const { data: profile } = await supabase
         .from('profiles')
@@ -138,20 +145,37 @@ export default function Dashboard() {
     return Math.round((matchingSkills.length / normRequiredSkills.length) * 100);
   };
   
+  const handleAutoApplyToAll = async () => {
+    if (!user) return;
+    
+    try {
+      setIsAutoApplying(true);
+      
+      const { data, error } = await supabase.functions.invoke('auto-apply', {
+        body: { userId: user.id },
+      });
+      
+      if (error) throw error;
+      
+      if (data.success) {
+        toast.success(data.message || `Successfully auto-applied to ${data.applications_count} opportunities!`);
+        // Refetch data to show updates
+        await fetchData();
+      } else {
+        toast.error(data.message || "Auto-apply failed");
+      }
+    } catch (error) {
+      console.error("Error auto-applying:", error);
+      toast.error("Failed to auto-apply to opportunities");
+    } finally {
+      setIsAutoApplying(false);
+    }
+  };
+  
   const handleApply = async (opportunity: Opportunity) => {
     if (!user) return;
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      
       // Get user profile
       const { data: profile } = await supabase
         .from('profiles')
@@ -170,7 +194,8 @@ export default function Dashboard() {
           opportunity_id: opportunity.id,
           match_score: opportunity.match_score || 70,
           status: 'applied',
-          cover_letter: coverLetter
+          cover_letter: coverLetter,
+          applied_at: new Date().toISOString()
         }])
         .select('*, opportunity:opportunities(*)');
       
@@ -191,8 +216,13 @@ export default function Dashboard() {
     }
   };
   
+  const viewApplicationDetails = (application: Application) => {
+    setSelectedApplication(application);
+    setDialogOpen(true);
+  };
+  
   const generateCoverLetter = (profile: any, opportunity: Opportunity) => {
-    return `Dear Hiring Manager,
+    return `Dear Hiring Manager${opportunity.company ? ` at ${opportunity.company}` : ''},
 
 I am writing to express my interest in the ${opportunity.title} opportunity listed on ${opportunity.platform}. As a ${profile?.education || 'student'} with skills in ${profile?.skills?.join(', ') || 'various technologies'}, I believe I am well-suited for this role.
 
@@ -318,11 +348,24 @@ ${profile?.name || 'Applicant'}`;
           </TabsList>
           
           <TabsContent value="opportunities" className="mt-6">
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-2">Opportunities Matched to Your Profile</h2>
-              <p className="text-muted-foreground">
-                We've found {matchedOpportunities.length} opportunities that match your skills and interests.
-              </p>
+            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Opportunities Matched to Your Profile</h2>
+                <p className="text-muted-foreground">
+                  We've found {matchedOpportunities.length} opportunities that match your skills and interests.
+                </p>
+              </div>
+              
+              {matchedOpportunities.length > 0 && (
+                <Button 
+                  onClick={handleAutoApplyToAll}
+                  disabled={isAutoApplying}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  {isAutoApplying ? "Applying..." : "Auto-Apply to All Matches"}
+                </Button>
+              )}
             </div>
             
             {matchedOpportunities.length > 0 ? (
@@ -336,6 +379,9 @@ ${profile?.name || 'Applicant'}`;
                           <CardDescription className="flex items-center mt-1">
                             {opportunity.platform}
                           </CardDescription>
+                          {opportunity.company && (
+                            <p className="text-sm font-medium mt-1">{opportunity.company}</p>
+                          )}
                         </div>
                         <Badge 
                           variant={opportunity.match_score >= 90 ? "default" : "outline"}
@@ -452,6 +498,12 @@ ${profile?.name || 'Applicant'}`;
                         </div>
                       </div>
                       
+                      {application.applied_at && (
+                        <div className="mb-4 text-xs text-muted-foreground">
+                          Applied on: {new Date(application.applied_at).toLocaleDateString()}
+                        </div>
+                      )}
+                      
                       <div className="mb-4">
                         <p className="text-sm font-medium mb-2">Required Skills:</p>
                         <div className="flex flex-wrap gap-1">
@@ -469,10 +521,7 @@ ${profile?.name || 'Applicant'}`;
                           variant="outline" 
                           size="sm" 
                           className="mt-2 w-full"
-                          onClick={() => {
-                            // View application details logic
-                            toast.info("Application details coming soon!");
-                          }}
+                          onClick={() => viewApplicationDetails(application)}
                         >
                           View Details
                         </Button>
@@ -491,6 +540,61 @@ ${profile?.name || 'Applicant'}`;
           </TabsContent>
         </Tabs>
       </div>
+      
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedApplication?.opportunity?.title}</DialogTitle>
+            <DialogDescription>
+              {selectedApplication?.opportunity?.platform} • {selectedApplication?.opportunity?.category}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedApplication && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2">
+                  <Badge variant={selectedApplication.status === 'applied' ? "default" : "outline"}>
+                    {selectedApplication.status}
+                  </Badge>
+                  <Badge variant="outline">
+                    Match: {selectedApplication.match_score}%
+                  </Badge>
+                </div>
+                {selectedApplication.applied_at && (
+                  <p className="text-sm text-muted-foreground">
+                    Applied on {new Date(selectedApplication.applied_at).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Cover Letter</h3>
+                <div className="whitespace-pre-wrap rounded-md border p-4 text-sm">
+                  {selectedApplication.cover_letter}
+                </div>
+              </div>
+              
+              {selectedApplication.opportunity?.application_url && (
+                <div className="pt-4">
+                  <a 
+                    href={selectedApplication.opportunity.application_url} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-brand-600 hover:underline text-sm"
+                  >
+                    View original posting
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button onClick={() => setDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

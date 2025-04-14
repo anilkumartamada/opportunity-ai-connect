@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { MainLayout } from "@/layouts/main-layout";
@@ -8,13 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { X, Upload, Plus, Check } from "lucide-react";
+import { X, Upload, Plus, Check, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 
-// Define the types
 interface ProfileData {
   id: string;
   name: string;
@@ -23,6 +21,7 @@ interface ProfileData {
   education: string;
   experience: string;
   resume_url: string;
+  resume_name?: string;
 }
 
 export default function Profile() {
@@ -33,6 +32,7 @@ export default function Profile() {
   const [newSkill, setNewSkill] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [progressPercentage, setProgressPercentage] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   useEffect(() => {
     if (!loading && user) {
@@ -60,7 +60,6 @@ export default function Profile() {
       
       if (error) {
         console.error("Error fetching profile:", error);
-        // If profile doesn't exist yet, create it
         if (error.code === 'PGRST116') {
           await createProfile();
           return;
@@ -68,7 +67,6 @@ export default function Profile() {
         throw error;
       }
       
-      // Convert JSONB skills to string array if needed
       const formattedProfile = {
         ...data,
         skills: Array.isArray(data.skills) ? data.skills : []
@@ -87,7 +85,6 @@ export default function Profile() {
     if (!user) return;
     
     try {
-      // Create initial profile
       const initialProfile = {
         id: user.id,
         name: user.user_metadata?.full_name || "",
@@ -118,26 +115,40 @@ export default function Profile() {
     setIsSaving(true);
     
     try {
-      // Upload resume if there is one
       let resumeUrl = profile.resume_url;
+      let resumeName = profile.resume_name || '';
+      
       if (resumeFile) {
+        const uploadToastId = toast.loading(`Uploading resume: 0%`);
+        
+        const fileName = `${crypto.randomUUID()}_${resumeFile.name}`;
+        
         const { data: fileData, error: fileError } = await supabase.storage
           .from("resumes")
-          .upload(`${user.id}/${Date.now()}_${resumeFile.name}`, resumeFile, {
+          .upload(`${user.id}/${fileName}`, resumeFile, {
             upsert: true,
+            onUploadProgress: (progress) => {
+              const percent = Math.round((progress.loaded / progress.total) * 100);
+              setUploadProgress(percent);
+              toast.loading(`Uploading resume: ${percent}%`, { id: uploadToastId });
+            }
           });
         
-        if (fileError) throw fileError;
+        if (fileError) {
+          toast.error("Failed to upload resume", { id: uploadToastId });
+          throw fileError;
+        }
         
-        // Get the public URL for the file
-        const { data: urlData } = supabase.storage
+        const { data: urlData } = await supabase.storage
           .from("resumes")
-          .getPublicUrl(fileData.path);
+          .createSignedUrl(fileData.path, 60 * 60 * 24 * 7);
         
-        resumeUrl = urlData.publicUrl;
+        resumeUrl = urlData?.signedUrl || '';
+        resumeName = resumeFile.name;
+        
+        toast.success("Resume uploaded successfully", { id: uploadToastId });
       }
       
-      // Update profile
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -145,17 +156,18 @@ export default function Profile() {
           skills: profile.skills,
           education: profile.education,
           experience: profile.experience,
-          resume_url: resumeUrl
+          resume_url: resumeUrl,
+          resume_name: resumeName
         })
         .eq('id', user.id);
       
       if (error) throw error;
       
-      // Update local profile with new resume URL if uploaded
       if (resumeFile) {
         setProfile({
           ...profile,
-          resume_url: resumeUrl
+          resume_url: resumeUrl,
+          resume_name: resumeName
         });
         setResumeFile(null);
       }
@@ -167,13 +179,13 @@ export default function Profile() {
       toast.error("Failed to save profile");
     } finally {
       setIsSaving(false);
+      setUploadProgress(0);
     }
   };
   
   const handleAddSkill = () => {
     if (!newSkill.trim() || !profile) return;
     
-    // Avoid duplicates
     if (profile.skills.includes(newSkill.trim())) {
       toast.error("This skill is already added");
       return;
@@ -199,13 +211,11 @@ export default function Profile() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Check if file is a PDF
       if (file.type !== "application/pdf") {
         toast.error("Please upload a PDF file");
         return;
       }
       
-      // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         toast.error("File size must be less than 5MB");
         return;
@@ -222,7 +232,7 @@ export default function Profile() {
     }
     
     let completed = 0;
-    const total = 5; // name, email, skills, education, experience, resume
+    const total = 5;
     
     if (profile.name) completed++;
     if (profile.email) completed++;
@@ -235,7 +245,6 @@ export default function Profile() {
     setProgressPercentage(percentage);
   };
   
-  // If not logged in, redirect to login
   if (!loading && !user) {
     return <Navigate to="/login" replace />;
   }
@@ -269,7 +278,6 @@ export default function Profile() {
           
           {profile && (
             <div className="space-y-6">
-              {/* Personal Information */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Personal Information</h2>
                 <div className="grid grid-cols-1 gap-4">
@@ -297,7 +305,6 @@ export default function Profile() {
                 </div>
               </div>
               
-              {/* Skills */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Technical Skills</h2>
                 
@@ -335,7 +342,6 @@ export default function Profile() {
                 </div>
               </div>
               
-              {/* Education */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Education</h2>
                 <div className="space-y-2">
@@ -350,7 +356,6 @@ export default function Profile() {
                 </div>
               </div>
               
-              {/* Experience */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Work Experience</h2>
                 <div className="space-y-2">
@@ -365,7 +370,6 @@ export default function Profile() {
                 </div>
               </div>
               
-              {/* Resume Upload */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Resume</h2>
                 
@@ -388,14 +392,14 @@ export default function Profile() {
                     
                     {profile.resume_url && !resumeFile && (
                       <div className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-500" />
+                        <FileText className="h-4 w-4 text-green-500" />
                         <a
                           href={profile.resume_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm underline text-brand-600"
                         >
-                          View current resume
+                          {profile.resume_name || "View current resume"}
                         </a>
                       </div>
                     )}
@@ -404,6 +408,12 @@ export default function Profile() {
                     <p className="text-sm text-muted-foreground">
                       New resume selected: {resumeFile.name}
                     </p>
+                  )}
+                  {uploadProgress > 0 && uploadProgress < 100 && (
+                    <div className="mt-2">
+                      <Progress value={uploadProgress} className="h-1" />
+                      <p className="text-xs text-muted-foreground mt-1">Uploading: {uploadProgress}%</p>
+                    </div>
                   )}
                 </div>
               </div>

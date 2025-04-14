@@ -6,3 +6,8 @@ project_id = "xhkyetlapzkmcikqzipe"
 public = false
 file_size_limit = "5MB" 
 allowed_mime_types = ["application/pdf"]
+
+[functions]
+[functions.scrape-opportunities]
+[functions.auto-apply]
+

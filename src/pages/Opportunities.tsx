@@ -1,6 +1,5 @@
 
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { MainLayout } from "@/layouts/main-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,10 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar, Briefcase, Award, Clock, Search, Filter, SlidersHorizontal } from "lucide-react";
+import { Calendar, Briefcase, Award, Clock, Search, Filter, SlidersHorizontal, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Opportunity {
   id: string;
@@ -26,12 +26,17 @@ interface Opportunity {
   deadline: string;
   category: string;
   required_skills: string[];
+  company?: string;
+  location?: string;
+  description?: string;
+  application_url?: string;
 }
 
 export default function Opportunities() {
   const { user } = useAuth();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -42,17 +47,7 @@ export default function Opportunities() {
   
   const fetchOpportunities = async () => {
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Missing Supabase credentials. Please connect to Supabase first.");
-        setOpportunities(getMockOpportunities());
-        setIsLoading(false);
-        return;
-      }
-      
-      const supabase = createClient(supabaseUrl, supabaseKey);
+      setIsLoading(true);
       
       const { data, error } = await supabase
         .from('opportunities')
@@ -74,6 +69,29 @@ export default function Opportunities() {
       setOpportunities(getMockOpportunities());
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const refreshOpportunities = async () => {
+    try {
+      setIsRefreshing(true);
+      
+      // Call our edge function to scrape new opportunities
+      const { error } = await supabase.functions.invoke('scrape-opportunities', {
+        body: {},
+      });
+      
+      if (error) throw error;
+      
+      // Fetch the updated list
+      await fetchOpportunities();
+      
+      toast.success("Opportunities refreshed successfully!");
+    } catch (error) {
+      console.error("Error refreshing opportunities:", error);
+      toast.error("Failed to refresh opportunities");
+    } finally {
+      setIsRefreshing(false);
     }
   };
   
@@ -150,7 +168,9 @@ export default function Opportunities() {
     // Search term filter
     const matchesSearch = opp.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          opp.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         opp.required_skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase()));
+                         opp.required_skills.some(skill => skill.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (opp.company && opp.company.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (opp.location && opp.location.toLowerCase().includes(searchTerm.toLowerCase()));
     
     // Category filter
     const matchesCategory = categoryFilter === "all" || opp.category === categoryFilter;
@@ -177,11 +197,22 @@ export default function Opportunities() {
             </p>
           </div>
           
-          {user && (
-            <Button asChild className="mt-4 md:mt-0">
-              <Link to="/dashboard">View Matched Opportunities</Link>
+          <div className="flex gap-2 mt-4 md:mt-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={refreshOpportunities} 
+              disabled={isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
-          )}
+            {user && (
+              <Button asChild size="sm">
+                <Link to="/dashboard">View Matched Opportunities</Link>
+              </Button>
+            )}
+          </div>
         </div>
         
         {/* Filters */}
@@ -189,7 +220,7 @@ export default function Opportunities() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by title, platform or skills..."
+              placeholder="Search by title, company, skills, or location..."
               className="pl-10"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -249,7 +280,15 @@ export default function Opportunities() {
                       <div className="flex justify-between items-start">
                         <CardTitle className="text-xl">{opportunity.title}</CardTitle>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">{opportunity.platform}</p>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">{opportunity.platform}</p>
+                        {opportunity.company && (
+                          <p className="text-sm font-medium">{opportunity.company}</p>
+                        )}
+                        {opportunity.location && (
+                          <p className="text-xs text-muted-foreground">{opportunity.location}</p>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="flex-1 flex flex-col">
                       <div className="grid grid-cols-2 gap-2 mb-4">
@@ -262,6 +301,12 @@ export default function Opportunities() {
                           <span className="ml-1">{opportunity.category}</span>
                         </div>
                       </div>
+                      
+                      {opportunity.description && (
+                        <div className="mb-4">
+                          <p className="text-sm line-clamp-2">{opportunity.description}</p>
+                        </div>
+                      )}
                       
                       <div className="mb-4 flex-1">
                         <p className="text-sm font-medium mb-2">Required Skills:</p>
