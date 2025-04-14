@@ -9,6 +9,86 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      applications: {
+        Row: {
+          applied_at: string
+          cover_letter: string | null
+          id: string
+          match_score: number
+          opportunity_id: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string
+          cover_letter?: string | null
+          id?: string
+          match_score: number
+          opportunity_id: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          applied_at?: string
+          cover_letter?: string | null
+          id?: string
+          match_score?: number
+          opportunity_id?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "applications_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opportunities: {
+        Row: {
+          application_url: string | null
+          category: string
+          company: string | null
+          created_at: string
+          deadline: string
+          description: string | null
+          id: string
+          location: string | null
+          platform: string
+          required_skills: Json | null
+          title: string
+        }
+        Insert: {
+          application_url?: string | null
+          category: string
+          company?: string | null
+          created_at?: string
+          deadline: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          platform: string
+          required_skills?: Json | null
+          title: string
+        }
+        Update: {
+          application_url?: string | null
+          category?: string
+          company?: string | null
+          created_at?: string
+          deadline?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          platform?: string
+          required_skills?: Json | null
+          title?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           education: string | null
@@ -16,6 +96,7 @@ export type Database = {
           experience: string | null
           id: string
           name: string | null
+          resume_name: string | null
           resume_url: string | null
           skills: Json | null
         }
@@ -25,6 +106,7 @@ export type Database = {
           experience?: string | null
           id: string
           name?: string | null
+          resume_name?: string | null
           resume_url?: string | null
           skills?: Json | null
         }
@@ -34,6 +116,7 @@ export type Database = {
           experience?: string | null
           id?: string
           name?: string | null
+          resume_name?: string | null
           resume_url?: string | null
           skills?: Json | null
         }

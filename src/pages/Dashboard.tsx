@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router-dom";
 import { MainLayout } from "@/layouts/main-layout";
@@ -15,35 +14,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Opportunity {
-  id: string;
-  title: string;
-  platform: string;
-  deadline: string;
-  category: string;
-  required_skills: string[];
-  match_score?: number;
-  company?: string;
-  location?: string;
-  description?: string;
-  application_url?: string;
-}
-
-interface Application {
-  id: string;
-  opportunity_id: string;
-  status: "pending" | "applied";
-  match_score: number;
-  cover_letter: string;
-  opportunity?: Opportunity;
-  applied_at?: string;
-}
+import { Opportunity, Application, Profile } from "@/types/database";
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
@@ -68,76 +43,66 @@ export default function Dashboard() {
     
     try {
       // Fetch user profile and skills
-      const { data: profile } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('skills')
+        .select('*')
         .eq('id', user.id)
         .single();
       
+      if (profileError) throw profileError;
+      
       // Fetch opportunities
-      const { data: allOpportunities } = await supabase
+      const { data: opportunitiesData, error: opportunitiesError } = await supabase
         .from('opportunities')
         .select('*');
       
-      // Fetch user applications
-      const { data: userApplications } = await supabase
+      if (opportunitiesError) throw opportunitiesError;
+      
+      // Fetch user applications with opportunities
+      const { data: applicationsData, error: applicationsError } = await supabase
         .from('applications')
         .select('*, opportunity:opportunities(*)')
         .eq('user_id', user.id);
       
-      if (!allOpportunities) {
-        // If no opportunities, show mock data for demonstration
-        const mockOpportunities = getMockOpportunities();
-        setMatchedOpportunities(mockOpportunities);
-      } else {
-        // If we have real data, filter for matches with user skills
-        const userSkills = profile?.skills || [];
-        
-        // Filter out opportunities that are already applied for
-        const appliedOpportunityIds = (userApplications || []).map(app => app.opportunity_id);
-        
-        const matches = allOpportunities
-          .filter(opp => !appliedOpportunityIds.includes(opp.id))
-          .map(opp => {
-            // Calculate match score based on skill overlap
-            const matchScore = calculateMatchScore(userSkills, opp.required_skills);
-            return { ...opp, match_score: matchScore };
-          })
-          .filter(opp => opp.match_score >= 70) // Only show opportunities with 70%+ match
-          .sort((a, b) => b.match_score - a.match_score); // Sort by match score
-        
-        setMatchedOpportunities(matches);
-      }
+      if (applicationsError) throw applicationsError;
       
-      // Handle applications
-      if (!userApplications || userApplications.length === 0) {
-        // If no applications, use mock data for demonstration
-        const mockApplications = getMockApplications();
-        setApplications(mockApplications);
-      } else {
-        setApplications(userApplications as Application[]);
-      }
+      // Calculate match opportunities
+      const userSkills = profileData.skills as string[] || [];
+      
+      const matchedOpps = (opportunitiesData as Opportunity[])
+        .filter(opp => {
+          const matchScore = calculateMatchScore(userSkills, opp.required_skills);
+          return matchScore >= 70;
+        })
+        .map(opp => ({
+          ...opp,
+          match_score: calculateMatchScore(userSkills, opp.required_skills)
+        }))
+        .sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+      
+      setMatchedOpportunities(matchedOpps);
+      
+      // Set applications
+      const formattedApplications = (applicationsData as any[]).map(app => ({
+        ...app,
+        opportunity: app.opportunity || null
+      }));
+      
+      setApplications(formattedApplications);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load dashboard data");
-      
-      // Use mock data as fallback
-      setMatchedOpportunities(getMockOpportunities());
-      setApplications(getMockApplications());
     } finally {
       setIsLoading(false);
     }
   };
   
-  const calculateMatchScore = (userSkills: string[], requiredSkills: string[]) => {
-    if (!requiredSkills || requiredSkills.length === 0) return 0;
-    if (!userSkills || userSkills.length === 0) return 0;
+  const calculateMatchScore = (userSkills: string[], requiredSkills: string[]): number => {
+    if (!requiredSkills?.length || !userSkills?.length) return 0;
     
-    // Convert to lowercase for case-insensitive matching
     const normUserSkills = userSkills.map(skill => skill.toLowerCase());
     const normRequiredSkills = requiredSkills.map(skill => skill.toLowerCase());
     
-    // Count matching skills
     const matchingSkills = normRequiredSkills.filter(skill => 
       normUserSkills.some(userSkill => userSkill.includes(skill) || skill.includes(userSkill))
     );
