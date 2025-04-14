@@ -13,6 +13,7 @@ import { ApplicationsTab } from "@/components/dashboard/ApplicationsTab";
 import { ApplicationDialog } from "@/components/dashboard/ApplicationDialog";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { generateCoverLetter } from "@/utils/coverLetterGenerator";
+import { normalizeSkills } from "@/utils/matchCalculator";
 
 export default function Dashboard() {
   const { user, loading } = useAuth();
@@ -21,7 +22,14 @@ export default function Dashboard() {
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   
-  const { matchedOpportunities, applications, isLoading, fetchData } = useDashboardData(user?.id);
+  const { 
+    matchedOpportunities, 
+    applications, 
+    isLoading, 
+    fetchData,
+    setMatchedOpportunities,
+    setApplications
+  } = useDashboardData(user?.id);
   
   const handleAutoApplyToAll = async () => {
     if (!user) return;
@@ -55,11 +63,19 @@ export default function Dashboard() {
     
     try {
       // Get user profile
-      const { data: profile } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
+      
+      if (profileError) throw profileError;
+      
+      // Ensure skills are properly formatted
+      const profile = {
+        ...profileData,
+        skills: normalizeSkills(profileData.skills)
+      };
       
       // Generate a cover letter
       const coverLetter = generateCoverLetter(profile, opportunity);
@@ -87,9 +103,7 @@ export default function Dashboard() {
         // Process the opportunity required_skills if needed
         let newApplication = data[0] as any;
         if (newApplication.opportunity && newApplication.opportunity.required_skills) {
-          const requiredSkills = Array.isArray(newApplication.opportunity.required_skills) 
-            ? newApplication.opportunity.required_skills 
-            : (typeof newApplication.opportunity.required_skills === 'string' ? JSON.parse(newApplication.opportunity.required_skills) : []);
+          const requiredSkills = normalizeSkills(newApplication.opportunity.required_skills);
             
           newApplication = {
             ...newApplication,
@@ -187,3 +201,21 @@ export default function Dashboard() {
     </MainLayout>
   );
 }
+
+const viewApplicationDetails = (application: Application) => {
+  setSelectedApplication(application);
+  setDialogOpen(true);
+};
+
+const getCategoryIcon = (category: string) => {
+  switch (category.toLowerCase()) {
+    case 'internship':
+      return <Briefcase className="h-4 w-4" />;
+    case 'hackathon':
+      return <Award className="h-4 w-4" />;
+    case 'workshop':
+      return <Calendar className="h-4 w-4" />;
+    default:
+      return <Briefcase className="h-4 w-4" />;
+  }
+};

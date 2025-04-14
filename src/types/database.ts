@@ -1,11 +1,13 @@
 
+import { Json } from "@/integrations/supabase/types";
+
 export interface Opportunity {
   id: string;
   title: string;
   platform: string;
   deadline: string;
   category: string;
-  required_skills: string[];
+  required_skills: string[] | Json;
   company?: string;
   location?: string;
   description?: string;
@@ -28,7 +30,7 @@ export interface Profile {
   id: string;
   name: string;
   email: string;
-  skills: string[];
+  skills: string[] | Json;
   education: string;
   experience: string;
   resume_url: string;

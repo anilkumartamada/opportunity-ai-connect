@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { MainLayout } from "@/layouts/main-layout";
 import { Button } from "@/components/ui/button";
@@ -18,19 +17,8 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Opportunity {
-  id: string;
-  title: string;
-  platform: string;
-  deadline: string;
-  category: string;
-  required_skills: string[];
-  company?: string;
-  location?: string;
-  description?: string;
-  application_url?: string;
-}
+import { Opportunity } from "@/types/database";
+import { normalizeSkills } from "@/utils/matchCalculator";
 
 export default function Opportunities() {
   const { user } = useAuth();
@@ -60,7 +48,13 @@ export default function Opportunities() {
         // If no data, use mock data
         setOpportunities(getMockOpportunities());
       } else {
-        setOpportunities(data);
+        // Process the data to normalize required_skills
+        const processedData = data.map(opp => ({
+          ...opp,
+          required_skills: normalizeSkills(opp.required_skills)
+        }));
+        
+        setOpportunities(processedData);
       }
     } catch (error) {
       console.error("Error fetching opportunities:", error);

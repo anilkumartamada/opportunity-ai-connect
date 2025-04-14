@@ -12,21 +12,12 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { Profile } from "@/types/database";
+import { normalizeSkills } from "@/utils/matchCalculator";
 
-interface ProfileData {
-  id: string;
-  name: string;
-  email: string;
-  skills: string[];
-  education: string;
-  experience: string;
-  resume_url: string;
-  resume_name?: string;
-}
-
-export default function Profile() {
+export default function ProfilePage() {
   const { user, loading } = useAuth();
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [newSkill, setNewSkill] = useState("");
@@ -69,10 +60,10 @@ export default function Profile() {
       
       const formattedProfile = {
         ...data,
-        skills: Array.isArray(data.skills) ? data.skills : []
+        skills: normalizeSkills(data.skills)
       };
       
-      setProfile(formattedProfile as ProfileData);
+      setProfile(formattedProfile as Profile);
     } catch (error) {
       console.error("Error:", error);
       toast.error("Failed to load profile");
@@ -102,7 +93,7 @@ export default function Profile() {
       
       if (error) throw error;
       
-      setProfile(data[0] as ProfileData);
+      setProfile(data[0] as Profile);
     } catch (error) {
       console.error("Error creating profile:", error);
       toast.error("Failed to create profile");
@@ -121,39 +112,53 @@ export default function Profile() {
       if (resumeFile) {
         const uploadToastId = toast.loading(`Uploading resume: 0%`);
         
-        const fileName = `${crypto.randomUUID()}_${resumeFile.name}`;
-        
-        const { data: fileData, error: fileError } = await supabase.storage
-          .from("resumes")
-          .upload(`${user.id}/${fileName}`, resumeFile, {
-            upsert: true,
-            onUploadProgress: (progress) => {
-              const percent = Math.round((progress.loaded / progress.total) * 100);
-              setUploadProgress(percent);
-              toast.loading(`Uploading resume: ${percent}%`, { id: uploadToastId });
-            }
+        try {
+          const { error: bucketError } = await supabase.storage.createBucket('resumes', {
+            public: true,
           });
-        
-        if (fileError) {
-          toast.error("Failed to upload resume", { id: uploadToastId });
-          throw fileError;
+          
+          if (bucketError && bucketError.message !== 'Bucket already exists') {
+            console.error("Error creating bucket:", bucketError);
+            toast.error("Failed to create storage bucket", { id: uploadToastId });
+          }
+          
+          const fileName = `${crypto.randomUUID()}_${resumeFile.name}`;
+          
+          const { data: fileData, error: fileError } = await supabase.storage
+            .from("resumes")
+            .upload(`${user.id}/${fileName}`, resumeFile, {
+              upsert: true,
+            });
+            
+          setUploadProgress(100);
+          
+          if (fileError) {
+            toast.error("Failed to upload resume", { id: uploadToastId });
+            throw fileError;
+          }
+          
+          const { data: urlData } = await supabase.storage
+            .from("resumes")
+            .createSignedUrl(fileData.path, 60 * 60 * 24 * 7);
+          
+          resumeUrl = urlData?.signedUrl || '';
+          resumeName = resumeFile.name;
+          
+          toast.success("Resume uploaded successfully", { id: uploadToastId });
+        } catch (error) {
+          console.error("Error uploading file:", error);
+          toast.error(`Upload failed: ${error.message}`, { id: uploadToastId });
+          throw error;
         }
-        
-        const { data: urlData } = await supabase.storage
-          .from("resumes")
-          .createSignedUrl(fileData.path, 60 * 60 * 24 * 7);
-        
-        resumeUrl = urlData?.signedUrl || '';
-        resumeName = resumeFile.name;
-        
-        toast.success("Resume uploaded successfully", { id: uploadToastId });
       }
+      
+      const skillsToSave = Array.isArray(profile.skills) ? profile.skills : normalizeSkills(profile.skills);
       
       const { error } = await supabase
         .from('profiles')
         .update({
           name: profile.name,
-          skills: profile.skills,
+          skills: skillsToSave,
           education: profile.education,
           experience: profile.experience,
           resume_url: resumeUrl,
@@ -176,7 +181,7 @@ export default function Profile() {
       calculateProgress();
     } catch (error) {
       console.error("Error saving profile:", error);
-      toast.error("Failed to save profile");
+      toast.error(`Failed to save profile: ${error.message || "Unknown error"}`);
     } finally {
       setIsSaving(false);
       setUploadProgress(0);

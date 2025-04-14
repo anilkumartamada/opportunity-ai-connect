@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Opportunity, Application, Profile } from "@/types/database";
-import { calculateMatchScore } from "@/utils/matchCalculator";
+import { calculateMatchScore, normalizeSkills } from "@/utils/matchCalculator";
 
 export const useDashboardData = (userId: string | undefined) => {
   const [matchedOpportunities, setMatchedOpportunities] = useState<Opportunity[]>([]);
@@ -40,24 +40,19 @@ export const useDashboardData = (userId: string | undefined) => {
       if (applicationsError) throw applicationsError;
       
       // Calculate match opportunities
-      const userSkills = profileData.skills as string[] || [];
+      const userSkills = normalizeSkills(profileData.skills);
       
       const matchedOpps = (opportunitiesData as any[])
         .filter(opp => {
-          // Convert JSON required_skills to string array if needed
-          const requiredSkills = Array.isArray(opp.required_skills) 
-            ? opp.required_skills 
-            : (typeof opp.required_skills === 'string' ? JSON.parse(opp.required_skills) : []);
-            
+          // Normalize required_skills
+          const requiredSkills = normalizeSkills(opp.required_skills);
           const matchScore = calculateMatchScore(userSkills, requiredSkills);
           return matchScore >= 70;
         })
         .map(opp => {
-          // Convert JSON required_skills to string array if needed
-          const requiredSkills = Array.isArray(opp.required_skills) 
-            ? opp.required_skills 
-            : (typeof opp.required_skills === 'string' ? JSON.parse(opp.required_skills) : []);
-            
+          // Normalize required_skills
+          const requiredSkills = normalizeSkills(opp.required_skills);
+          
           return {
             ...opp,
             required_skills: requiredSkills,
@@ -73,9 +68,7 @@ export const useDashboardData = (userId: string | undefined) => {
         // Process opportunity data within application
         let opportunity = app.opportunity;
         if (opportunity && opportunity.required_skills) {
-          const requiredSkills = Array.isArray(opportunity.required_skills) 
-            ? opportunity.required_skills 
-            : (typeof opportunity.required_skills === 'string' ? JSON.parse(opportunity.required_skills) : []);
+          const requiredSkills = normalizeSkills(opportunity.required_skills);
             
           opportunity = {
             ...opportunity,
@@ -108,6 +101,8 @@ export const useDashboardData = (userId: string | undefined) => {
     matchedOpportunities,
     applications,
     isLoading,
-    fetchData
+    fetchData,
+    setMatchedOpportunities,
+    setApplications
   };
 };
